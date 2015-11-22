@@ -36,7 +36,53 @@ team_t team = {
 };
 
 /* single word (4) or double word (8) alignment */
-#define ALIGNMENT 8
+#define SSIZE 4
+#define DSIZE 8
+#define TSIZE 12
+#define QSIZE 16
+#define OVERHEAD 8 #define ALIGNMENT 8 #define BLKSIZE 24
+#define CHUNKSIZE (1<<12) 
+#define INISIZE 1016
+
+
+
+
+/*Macros*/
+/*Max and min value of 2 values*/
+#define MAX(x, y) ( (x)>(y)? (x): (y) ) #define MIN(x, y) ( (x)<(y)? (x): (y) )
+/*Read and write a word at address p*/
+#define GET(p) (*(size_t *)(p))
+#define PUT(p, val) (*(size_t *)(p)=(val))
+/*Read the size and allocated fields from address p*/
+#define SIZE(p) (GET(p)&~0x7) #define PACK(size, alloc) ((size)|(alloc)) #define ALLOC(p) (GET(p)&0x1)
+/*Given pointer p at the second word of the data structure, compute addresses of its HEAD,LEFT,RIGHT,PRNT,BROS and FOOT pointer*/
+#define HEAD(p) ((void *)(p)-SSIZE)
+#define LEFT(p) ((void *)(p))
+#define RIGHT(p) ((void *)(p)+SSIZE)
+#define PRNT(p) ((void *)(p)+DSIZE)
+#define BROS(p) ((void *)(p)+TSIZE)
+#define FOOT(p) ((void *)(p)+SIZE(HEAD(p))-DSIZE)
+/*Make the block to meet with the standard alignment requirements*/
+#define ALIGN_SIZE(size) (((size) + (ALIGNMENT-1)) & ~0x7)
+/*Given block pointer bp, get the POINTER of its directions*/
+#define GET_SIZE(bp) ((GET(HEAD(bp)))&~0x7)
+#define GET_PREV(bp) ((void *)(bp)-SIZE(((void *)(bp)-DSIZE))) 
+#define GET_NEXT(bp) ((void *)(bp)+SIZE(HEAD(bp)))
+#define GET_ALLOC(bp) (GET(HEAD(bp))&0x1)
+/*Get the LEFT,RIGHT,PRNT,BROS and FOOT pointer of the block to which bp points*/
+#define GET_LEFT(bp) (GET(LEFT(bp)))
+#define GET_RIGHT(bp) (GET(RIGHT(bp)))
+#define GET_PRNT(bp) (GET(PRNT(bp))) #define GET_BROS(bp) (GET(BROS(bp))) 
+#define GET_FOOT(bp) (GET(FOOT(bp)))
+/*Define value to each character in the block bp points to.*/
+#define PUT_HEAD(bp, val) (PUT(HEAD(bp), (int)val)) 
+#define PUT_FOOT(bp, val) (PUT(FOOT(bp), (int)val)) 
+#define PUT_LEFT(bp, val) (PUT(LEFT(bp), (int)val)) 
+#define PUT_RIGHT(bp, val) (PUT(RIGHT(bp), (int)val)) 
+#define PUT_PRNT(bp, val) (PUT(PRNT(bp), (int)val)) 
+#define PUT_BROS(bp, val) (PUT(BROS(bp), (int)val))
+
+
 
 /* rounds up to the nearest multiple of ALIGNMENT */
 #define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
