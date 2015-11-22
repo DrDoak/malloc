@@ -94,18 +94,18 @@ team_t team = {
 #define SIZE_T_SIZE (ALIGN_SIZE(sizeof(size_t)))
 
 
-/* non-static functions */
-int mm_init ( void );
-void *mm_malloc ( size_t size );
-void mm_free ( void *bp );
-void *mm_realloc ( void *bp, size_t size );
-/* static functions */
-static void *coalesce ( void *bp );
-static void *extend_heap ( size_t size );
-static void place ( void *ptr, size_t asize );
-static void insert_node ( void *bp );
-static void delete_node ( void *bp );
-static void *find_fit ( size_t asize );
+///* non-static functions */
+//int mm_init ( void );
+//void *mm_malloc ( size_t size );
+//void mm_free ( void *bp );
+//void *mm_realloc ( void *bp, size_t size );
+///* static functions */
+//static void *coalesce ( void *bp );
+//static void *extend_heap ( size_t size );
+//static void place (void *ptr, size_t asize);
+//static void insert_node ( void *bp );
+//static void delete_node ( void *bp );
+//static void *find_fit ( size_t asize );
 /* Global variables */
 static void *heap_list_ptr;
 static void *free_tree_rt;
@@ -321,6 +321,208 @@ void *mm_realloc(void *ptr, size_t size)
             } }
     } else
         return NULL; }
+
+//place the requested block.
+static void place(void *bp,size_t asize) {
+    size_t csize = GET_SIZE(bp);
+    delete_node( bp );
+    if((csize-asize)>=BLKSIZE){
+        PUT_HEAD( bp,PACK(asize,1) );
+        PUT_FOOT( bp,PACK(asize,1) );
+        bp=GET_NEXT(bp);
+        PUT_HEAD( bp,PACK(csize-asize,0) );
+        PUT_FOOT( bp,PACK(csize-asize,0) );
+        insert_node( coalesce(bp) );
+    }
+    else{
+        PUT_HEAD( bp,PACK(csize,1) );
+        PUT_FOOT( bp,PACK(csize,1) );
+    } }
+
+
+
+//use best-fit
+static void* find_fit( size_t asize ) {
+    /* the most fit block */
+    void *fit = NULL;
+    /* temporary location of the search */
+    void *temp = free_tree_rt;
+    /* use tree to implement a comparative best fit search */
+    for(;temp!=NULL;){
+        /* The following node in the search may be worse, so we need to record the most fit so far. */
+        if( asize <= GET_SIZE(temp) ){
+            fit = temp;
+            temp = (void *)GET_LEFT(temp); }
+        else
+            temp = (void *)GET_RIGHT(temp);
+    }
+    return fit;
+}
+
+
+
+static void insert_node( void *bp ) {
+    /* root is NULL */
+    if( free_tree_rt == NULL ){
+        free_tree_rt = bp;
+        PUT_LEFT( bp, NULL );
+        PUT_RIGHT(bp, NULL );
+        PUT_PRNT( bp, NULL );
+        PUT_BROS( bp, NULL );
+        return;
+    }
+    /* treat temp as the start */
+    void *temp = free_tree_rt;
+    /* loop to locate the position */
+    while( 1 ){
+        /* Case 1: size of the block exactly matches the node. */
+        if( GET_SIZE(bp)==GET_SIZE(temp) ){
+            if( (void *)GET_BROS(temp) != NULL )
+            {/* more than one block in the node */
+                if( temp == free_tree_rt ){/* temp is parent,and the root*/
+                    free_tree_rt = bp;
+                    PUT_PRNT( bp, NULL ); }
+                else{/* temp is parent, and not the root */
+                    if( (void *)GET_LEFT(GET_PRNT(temp)) == temp)
+                    /* temp is left child(temp's parent's left child is temp) */
+                       PUT_LEFT( GET_PRNT(temp), bp );
+                       //put temp's parent's left point as bp.
+                    else /* temp is right child */
+                       PUT_RIGHT( GET_PRNT(temp), bp );
+                       PUT_PRNT( bp, GET_PRNT(temp) );
+                       //put bp's parent as temp's parent.
+                }
+                   PUT_LEFT( bp, GET_LEFT(temp) );
+                   PUT_RIGHT( bp, GET_RIGHT(temp) );
+                   PUT_BROS( bp, temp );
+                       //if temp is not parent(only siblings)
+                if( (void *)GET_LEFT(temp) != NULL )
+                   PUT_PRNT( GET_LEFT(temp), bp );
+                if( (void *)GET_RIGHT(temp) != NULL )
+                   PUT_PRNT( GET_RIGHT(temp), bp );
+                   PUT_LEFT( temp, bp );
+                   PUT_RIGHT( temp, -1 );
+                   break;
+            }
+               else{/* no more than one block in the node */
+                   PUT_BROS( bp, NULL );
+                   PUT_LEFT( bp, temp );
+                   PUT_RIGHT( bp, -1 );
+                   PUT_BROS( temp, bp );
+                   if( (void *)GET_BROS(bp) != NULL )
+                       PUT_LEFT( GET_BROS(bp), bp ); break;
+               }
+        }
+    /* Case 2: size of the block is less than that of the node. */
+       else if( GET_SIZE(bp) < GET_SIZE(temp) ){
+           if( (void *)GET_LEFT(temp) != NULL ){
+               temp = (void *)GET_LEFT( temp );
+           }else{
+            PUT_LEFT( temp, bp );
+            PUT_PRNT( bp, temp );
+            PUT_LEFT( bp, NULL );
+            PUT_RIGHT( bp, NULL );
+            PUT_BROS( bp, NULL );
+               break;
+           }
+       }
+    /* Case 3 size of the block is greater than that of the node. */
+       else{
+           if( (void *)GET_RIGHT(temp) != NULL ){
+               temp = (void *)GET_RIGHT(temp);
+           }else{
+               PUT_RIGHT( temp, bp );
+               PUT_PRNT( bp, temp );
+               PUT_LEFT( bp, NULL );
+               PUT_RIGHT( bp, NULL );
+               PUT_BROS( bp, NULL );
+               break;
+           }
+       }
+    }
+}
+
+
+static void delete_node(void *bp) {
+    /* Case that the block is the only one in the node */
+    if( (void *)GET_BROS(bp) == NULL && GET_RIGHT(bp) != -1 ){
+        if( bp == free_tree_rt ){/* the node is the root */
+            if( (void *)GET_RIGHT(bp) == NULL ){/* no right child */
+                free_tree_rt=(void *)GET_LEFT(bp);
+                if( free_tree_rt != NULL )
+                    PUT_PRNT( free_tree_rt, NULL );
+            }
+            else{/* it has a right child */
+                void *temp = (void *)GET_RIGHT(bp); while( (void *)GET_LEFT(temp) != NULL )
+                    temp = (void *)GET_LEFT(temp); void *tempL = (void *)GET_LEFT(bp); void *tempR = (void *)GET_RIGHT(temp); void *tempP = (void *)GET_PRNT(temp); free_tree_rt = temp;
+                if( free_tree_rt != NULL )
+                    PUT_PRNT( free_tree_rt, NULL ); PUT_LEFT( temp,GET_LEFT(bp) );
+                if( temp != (void *)GET_RIGHT(bp) ){
+                    PUT_RIGHT( temp,GET_RIGHT(bp) ); PUT_LEFT( tempP, tempR );
+                    if( tempR != NULL)
+                        PUT_PRNT( tempR, tempP ); PUT_PRNT( GET_RIGHT(bp),temp );
+                }
+                if( tempL != NULL )
+                    PUT_PRNT( tempL, temp );
+            }
+        }
+        else{/* the node is not the root */
+            if( (void *)GET_RIGHT(bp) == NULL ){/* no right child */
+                if( (void *)GET_LEFT( GET_PRNT( bp ) ) == bp )
+                    PUT_LEFT( GET_PRNT(bp), GET_LEFT(bp) ); else
+                        PUT_RIGHT( GET_PRNT(bp), GET_LEFT(bp) );
+                if( (void *)GET_LEFT(bp) != NULL)
+                    PUT_PRNT( GET_LEFT(bp), GET_PRNT(bp) );
+            }else{/* it has a right child */
+                void *temp = (void *)GET_RIGHT(bp); while( (void *)GET_LEFT(temp) != NULL )
+                    temp = (void *)GET_LEFT(temp);
+                void *tempL = (void *)GET_LEFT(bp);
+                void *tempR = (void *)GET_RIGHT(temp); void *tempP = (void *)GET_PRNT(temp);
+                if( (void *)GET_LEFT(GET_PRNT(bp)) == bp )
+                    PUT_LEFT( GET_PRNT(bp), temp ); else
+                        PUT_RIGHT( GET_PRNT(bp), temp );
+                PUT_PRNT( temp, GET_PRNT(bp) ); PUT_LEFT( temp, GET_LEFT(bp) ); if( temp != (void *)GET_RIGHT(bp)){
+                    PUT_RIGHT( temp, GET_RIGHT(bp) ); PUT_LEFT( tempP, tempR );
+                    if( tempR != NULL )
+                        PUT_PRNT( tempR,tempP ); PUT_PRNT( GET_RIGHT(bp), temp );
+                }
+                if( tempL != NULL )
+                    PUT_PRNT( tempL, temp );
+            }
+        }
+    }else{/* Other case */
+        if( bp == free_tree_rt ){/* the node is the root */
+            free_tree_rt = (void *)GET_BROS(bp);
+            PUT_PRNT( free_tree_rt, NULL );
+            PUT_LEFT( free_tree_rt, GET_LEFT(bp) );
+            PUT_RIGHT( free_tree_rt, GET_RIGHT(bp) );
+            if( (void *)GET_LEFT(bp) != NULL )
+                PUT_PRNT( GET_LEFT(bp), free_tree_rt );
+            if( (void *)GET_RIGHT(bp) != NULL )
+                PUT_PRNT( GET_RIGHT(bp), free_tree_rt );
+        }else{/* the node is not the root */
+            if( GET_RIGHT(bp) == -1 ){/* not the first block in the node */
+                PUT_BROS( GET_LEFT(bp),GET_BROS(bp) );
+                if( (void *)GET_BROS(bp) != NULL )
+                    PUT_LEFT( GET_BROS(bp),GET_LEFT(bp) );
+            }else{/* the first block in the node */
+                if( (void *)GET_LEFT(GET_PRNT(bp)) == bp )
+                    PUT_LEFT( GET_PRNT(bp), GET_BROS(bp) );
+                else
+                    PUT_RIGHT( GET_PRNT(bp), GET_BROS(bp) );
+                PUT_PRNT( GET_BROS(bp), GET_PRNT(bp) );
+                PUT_LEFT( GET_BROS(bp), GET_LEFT(bp) );
+                PUT_RIGHT( GET_BROS(bp), GET_RIGHT(bp) );
+                if( (void *)GET_LEFT(bp) != NULL )
+                    PUT_PRNT(GET_LEFT(bp), GET_BROS(bp) );
+                if( (void *)GET_RIGHT(bp) != NULL)
+                        PUT_PRNT(GET_RIGHT(bp), GET_BROS(bp) );
+            }
+        }
+    }
+}
+
+
 
 
 
