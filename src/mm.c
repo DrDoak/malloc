@@ -223,20 +223,106 @@ static void *coalesce(void *bp)
  */
 void *mm_realloc(void *ptr, size_t size)
 {
-    void *oldptr = ptr;
-    void *newptr;
-    size_t copySize;
-    
-    newptr = mm_malloc(size);
-    if (newptr == NULL)
-      return NULL;
-    copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
-    if (size < copySize)
-      copySize = size;
-    memcpy(newptr, oldptr, copySize);
-    mm_free(oldptr);
-    return newptr;
-}
+//    void *oldptr = ptr;
+//    void *newptr;
+//    size_t copySize;
+//    
+//    newptr = mm_malloc(size);
+//    if (newptr == NULL)
+//      return NULL;
+//    copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
+//    if (size < copySize)
+//      copySize = size;
+//    memcpy(newptr, oldptr, copySize);
+//    mm_free(oldptr);
+//    return newptr;
+    if( ptr==NULL || size==0 ){ mm_free(ptr);
+        return NULL; }
+    if( size > 0 ){
+        size_t oldsize = GET_SIZE( ptr );
+        size_t newsize = ALIGN_SIZE( size+OVERHEAD );
+        if( newsize < oldsize ){ /* newsize is less than oldsize */
+            if( GET_ALLOC( GET_NEXT(ptr) ) ){
+            /* the next block is allocated */
+            if( (oldsize-newsize) >= BLKSIZE ){
+                /* the remainder is greater than BLKSIZE */
+                PUT_HEAD( ptr, PACK(newsize,1) );
+                PUT_FOOT( ptr, PACK(newsize,1) );//newsize
+                void *temp = GET_NEXT(ptr);
+                //this pointer points to extra space
+                PUT_HEAD( temp, PACK(oldsize-newsize,0) );
+                PUT_FOOT( temp, PACK(oldsize-newsize,0) );
+                insert_node(temp);
+            }
+            else{ /* the remainder is less than BLKSIZE */
+                PUT_HEAD( ptr, PACK(oldsize,1) );
+                //oldsize still occupies all spaces.
+                PUT_FOOT( ptr, PACK(oldsize,1) ); }
+            return ptr; }
+        else{ /* the next block is free */
+            size_t csize = oldsize + GET_SIZE( GET_NEXT(ptr) );
+            delete_node( GET_NEXT(ptr) );
+            PUT_HEAD( ptr, PACK(newsize,1) );
+            PUT_FOOT( ptr, PACK(newsize,1) );
+            void *temp = GET_NEXT(ptr);
+            PUT_HEAD( temp, PACK(csize-newsize,0) );
+            PUT_FOOT( temp, PACK(csize-newsize,0) ); insert_node(temp);
+            return ptr; }
+        }
+        else{ /* newsize is greater than oldsize */
+            size_t prev_alloc = GET_ALLOC(GET_PREV(ptr));
+            size_t next_alloc = GET_ALLOC(GET_NEXT(ptr));
+            size_t csize;
+            /* the next block is free and the addition of the two blocks no less than the new size */
+            if( !next_alloc &&((csize=oldsize+GET_SIZE(GET_NEXT(ptr))) >= newsize)){
+                delete_node(GET_NEXT(ptr));
+                if((csize-newsize)>=BLKSIZE){
+                    PUT_HEAD( ptr, PACK(newsize,1) );
+                    PUT_FOOT( ptr, PACK(newsize,1) );
+                    void *temp=GET_NEXT(ptr);
+                    PUT_HEAD( temp, PACK(csize-newsize,0) );
+                    PUT_FOOT( temp, PACK(csize-newsize,0) );
+                    insert_node(temp);
+                }else{
+                    PUT_HEAD( ptr,PACK(csize,1) );
+                    PUT_FOOT( ptr,PACK(csize,1) );
+                }
+                return ptr;
+            }
+//            the previous block is free and the addition of the two blocks no less than the new size
+            else if( !prev_alloc &&
+                    ( (csize=oldsize+GET_SIZE(GET_PREV(ptr))) >= newsize) ){
+                delete_node(GET_PREV(ptr));
+                void *newptr=GET_PREV(ptr);
+                memcpy( newptr, ptr, oldsize-OVERHEAD );
+                if((csize-newsize)>=BLKSIZE){
+                    PUT_HEAD( newptr,PACK(newsize,1) );
+                    PUT_FOOT( newptr,PACK(newsize,1) );
+                    void *temp=GET_NEXT(newptr);
+                    PUT_HEAD( temp,PACK(csize-newsize,0) );
+                    PUT_FOOT( temp,PACK(csize-newsize,0) );
+                    insert_node(temp);
+                }else{
+                        PUT_HEAD( newptr,PACK(csize,1) );
+                        PUT_FOOT( newptr,PACK(csize,1) ); }
+                return newptr; }
+            else{
+                /* the next and previous block is free and the addition of the two blocks less than the new size */
+                size_t asize=ALIGN_SIZE(size+(OVERHEAD)); size_t extendsize;
+                void *newptr; if((newptr=find_fit(asize))==NULL){
+                    extendsize=MAX(asize,CHUNKSIZE);
+                    extend_heap(extendsize);
+                    if((newptr=find_fit(asize))==NULL)
+                        return NULL; }
+                place( newptr, asize );
+                /*copy content from memory*/
+                memcpy( newptr, ptr,oldsize-OVERHEAD); mm_free(ptr);
+                return newptr;
+            } }
+    } else
+        return NULL; }
+
+
 
 void mm_check() 
 {
