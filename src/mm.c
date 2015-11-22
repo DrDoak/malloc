@@ -49,6 +49,7 @@ team_t team = {
  */
 int mm_init(void)
 {
+	memlib::mem_init();
     return 0;
 }
 
@@ -58,21 +59,72 @@ int mm_init(void)
  */
 void *mm_malloc(size_t size)
 {
-    int newsize = ALIGN(size + SIZE_T_SIZE);
-    void *p = mem_sbrk(newsize);
-    if (p == (void *)-1)
-	return NULL;
-    else {
-        *(size_t *)p = size;
-        return (void *)((char *)p + SIZE_T_SIZE);
-    }
+	size_t asize; /* adjusted block size */
+	size_t extendsize; /* amount to extend heap if no fit */
+	char *bp;
+
+	/* Ignore spurious requests */
+	if (size <= 0)
+		return NULL;
+
+	/* Adjust block size to include overhead and alignment reqs. */
+	if (size <= DSIZE)
+		asize = DSIZE + OVERHEAD;
+	else
+		asize = DSIZE * ((size + (OVERHEAD) + (DSIZE-1)) / DSIZE);
+
+	/* Search the free list for a fit */
+	if ((bp = find_fit(asize)) != NULL) {
+		place(bp, asize);
+		return bp;
+	}
+
+	/* No fit found. Get more memory and place the block */
+	extendsize = MAX(asize,CHUNKSIZE);
+	if ((bp = extend_heap(extendsize/WSIZE)) == NULL)
+		return NULL;
+	place(bp, asize);
+	return bp;
 }
 
 /*
- * mm_free - Freeing a block does nothing.
+ * mm_free - Free function and coalesce helper function copied from textbook.
  */
-void mm_free(void *ptr)
+void mm_free(void *bp)
 {
+	size_t size = GET_SIZE(HDRP(bp));
+	PUT(HDRP(bp), PACK(size, 0));
+	PUT(FTRP(bp), PACK(size, 0));
+	coalesce(bp);
+}
+
+static void *coalesce(void *bp)
+{
+	size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
+	size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
+	size_t size = GET_SIZE(HDRP(bp));
+	if (prev_alloc && next_alloc) { /* Case 1 */
+		return bp;
+	}
+	else if (prev_alloc && !next_alloc) { /* Case 2 */
+		size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
+		PUT(HDRP(bp), PACK(size, 0));
+		PUT(FTRP(bp), PACK(size,0));
+		return(bp);
+	}
+	else if (!prev_alloc && next_alloc) { /* Case 3 */
+		size += GET_SIZE(HDRP(PREV_BLKP(bp)));
+		PUT(FTRP(bp), PACK(size, 0));
+		PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+		return(PREV_BLKP(bp));
+	}
+	else { /* Case 4 */
+		size += GET_SIZE(HDRP(PREV_BLKP(bp))) +
+		GET_SIZE(FTRP(NEXT_BLKP(bp)));
+		PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+		PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
+		return(PREV_BLKP(bp));
+	}
 }
 
 /*
