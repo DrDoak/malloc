@@ -94,18 +94,18 @@ team_t team = {
 #define SIZE_T_SIZE (ALIGN_SIZE(sizeof(size_t)))
 
 
-///* non-static functions */
-//int mm_init ( void );
-//void *mm_malloc ( size_t size );
-//void mm_free ( void *bp );
-//void *mm_realloc ( void *bp, size_t size );
-///* static functions */
-//static void *coalesce ( void *bp );
-//static void *extend_heap ( size_t size );
-//static void place (void *ptr, size_t asize);
-//static void insert_node ( void *bp );
-//static void delete_node ( void *bp );
-//static void *find_fit ( size_t asize );
+/* non-static functions */
+int mm_init ( void );
+void *mm_malloc ( size_t size );
+void mm_free ( void *bp );
+void *mm_realloc ( void *bp, size_t size );
+/* static functions */
+static void *coalesce ( void *bp );
+static void *extend_heap ( size_t size );
+static void place (void *ptr, size_t asize);
+static void insert_node ( void *bp );
+static void delete_node ( void *bp );
+static void *find_fit ( size_t asize );
 /* Global variables */
 static void *heap_list_ptr;
 static void *free_tree_rt;
